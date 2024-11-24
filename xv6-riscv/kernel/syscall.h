@@ -23,3 +23,7 @@
 
 // added for sys_getfilennum
 #define SYS_getfilenum 22
+
+// project 3 additions
+#define SYS_settickets 23
+#define SYS_getpinfo 24

@@ -5,6 +5,8 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "pstat.h"
+#include "random.h"
 
 struct cpu cpus[NCPU];
 
@@ -124,6 +126,13 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+
+  // project 3 additions
+  // initialize tickets and ticks
+    // default every process's tickets to 1
+  p->tickets = 1; 
+    // tick count starts at 0
+  p->ticks = 0;
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -288,6 +297,10 @@ fork(void)
     return -1;
   }
 
+  // projecct 3 additions
+    // child's tickets are set from parent's tickets
+  np->tickets = p->tickets;
+
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
     freeproc(np);
@@ -446,39 +459,62 @@ scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
-
   c->proc = 0;
+  rand_init(7);
   for(;;){
-    // The most recent process to run may have had interrupts
-    // turned off; enable them to avoid a deadlock if all
-    // processes are waiting.
+    // Enable interrupts to prevent deadlock
     intr_on();
 
+    int total_tickets = 0;
     int found = 0;
+
+    // calc number of tickets on all runnable processes
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
-
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
-        found = 1;
+        total_tickets += p->tickets;  // sum tickets for RUNNABLE processes
       }
       release(&p->lock);
     }
-    if(found == 0) {
-      // nothing to run; stop running on this core until an interrupt.
+
+    if (total_tickets > 0) {
+      // generate random number between 0 and total_tickets - 1
+      int winning_ticket = scaled_random(0, total_tickets - 1); 
+
+      int current_ticket_sum = 0;
+
+      // choose process where winning ticket is in its ticket range
+      for(p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
+        if(p->state == RUNNABLE) {
+          current_ticket_sum += p->tickets;
+          if(current_ticket_sum > winning_ticket) {
+            // the winning process
+            p->state = RUNNING;
+            c->proc = p;
+            found = 1;
+
+            p->ticks++;
+            // context switch to the chosen process
+            swtch(&c->context, &p->context);
+            // process is done running, reset CPU's process
+            c->proc = 0;
+            release(&p->lock);
+            break;
+          }
+        }
+        release(&p->lock);
+      }
+    }
+
+    // no process was found, halt the CPU until the next interrupt
+    if(!found) {
       intr_on();
       asm volatile("wfi");
     }
   }
 }
+
 
 // Switch to scheduler.  Must hold only p->lock
 // and have changed proc->state. Saves and restores
@@ -692,4 +728,25 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+int
+getpinfo(struct pstat *p)
+{
+  struct pstat kernel_pinfo;
+
+  // populate the kernel-side pstat structure
+  for (int i = 0; i < NPROC; i++) {
+    kernel_pinfo.inuse[i] = (proc[i].state != UNUSED);  // mark if the process is in use
+    kernel_pinfo.tickets[i] = proc[i].tickets;          // number of tickets
+    kernel_pinfo.pid[i] = proc[i].pid;                  // process ID
+    kernel_pinfo.ticks[i] = proc[i].ticks;              // number of ticks
+  }
+
+  // use either_copyout to copy the kernel buffer to user space
+  if (either_copyout(1, (uint64)p, &kernel_pinfo, sizeof(kernel_pinfo)) < 0) {
+    return -1; // error copying
+  }
+
+  return 0; // Success
 }

@@ -6,6 +6,8 @@
 #include "proc.h"
 #include "syscall.h"
 #include "defs.h"
+#include "pstat.h"
+#include "random.h"
 
 // Fetch the uint64 at addr from the current process.
 int
@@ -103,6 +105,9 @@ extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 // added for sys_getfilennum
 extern uint64 sys_getfilenum(void);
+// project 3 additions
+extern uint64 sys_settickets(void);
+extern uint64 sys_getpinfo(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -130,6 +135,9 @@ static uint64 (*syscalls[])(void) = {
 [SYS_close]   sys_close,
 // added for sys_getfilennum
 [SYS_getfilenum]  sys_getfilenum,
+// project 3 additions
+[SYS_settickets] sys_settickets,
+[SYS_getpinfo] sys_getpinfo,
 
 };
 

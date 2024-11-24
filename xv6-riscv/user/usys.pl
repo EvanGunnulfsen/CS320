@@ -38,3 +38,7 @@ entry("sleep");
 entry("uptime");
 # added for sys_getfilennum
 entry("getfilenum");
+
+# added for project 3
+entry("getpinfo");
+entry("settickets");

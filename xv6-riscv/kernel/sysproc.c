@@ -5,6 +5,11 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "pstat.h"
+#include "random.h"
+
+// added for project 3
+int getpinfo(struct pstat*);
 
 uint64
 sys_exit(void)
@@ -134,4 +139,21 @@ sys_getfilenum(void)
 
   // Process not found, return -1
   return -1;
+}
+// added for project 3
+uint64
+sys_settickets(void){
+  int n;
+  argint(0, &n);
+
+  myproc()->tickets=n;
+  return 0;
+}
+
+uint64
+sys_getpinfo(void)
+{
+  struct pstat *p;
+  argaddr(0, (uint64*)&p);
+  return (getpinfo(p));
 }
